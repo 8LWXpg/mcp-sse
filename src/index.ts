@@ -1,44 +1,41 @@
-import express, { Request, Response } from "express";
-import {
-  McpServer,
-  ResourceTemplate,
-} from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { z } from "zod";
+import express, { Request, Response } from 'express';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { z } from 'zod';
 
 const server = new McpServer({
-  name: "example-server",
-  version: "1.0.0",
+	name: 'openkm',
+	version: '1.0.0',
 });
 
+const okmHeaders = new Headers();
+okmHeaders.set('Authorization', 'Basic ' + btoa(`okmAdmin:admin`));
+okmHeaders.set('Accept', 'application/json');
+
+const okmURL = 'http://192.168.0.42:8080/OpenKM/services/rest';
+
+server.tool('echo', { message: z.string() }, async ({ message }) => ({
+	content: [{ type: 'text', text: `Tool echo: ${message} ${message}` }],
+}));
+
 server.resource(
-  "echo",
-  new ResourceTemplate("echo://{message}", { list: undefined }),
-  async (uri, { message }) => ({
-    contents: [
-      {
-        uri: uri.href,
-        text: `Resource echo echo: ${message}`,
-      },
-    ],
-  })
+	'Get user last modified documents',
+	'dashboard://getUserLastModifiedDocuments',
+	async (uri: URL) => ({
+		contents: [
+			{
+				uri: uri.href,
+				text: JSON.stringify(
+					await (
+						await fetch(`${okmURL}/dashboard/getUserLastModifiedDocuments`, {
+							headers: okmHeaders,
+						})
+					).json(),
+				),
+			},
+		],
+	}),
 );
-
-server.tool("echo", { message: z.string() }, async ({ message }) => ({
-  content: [{ type: "text", text: `Tool echo: ${message} ${message}` }],
-}));
-
-server.prompt("echo", { message: z.string() }, ({ message }) => ({
-  messages: [
-    {
-      role: "user",
-      content: {
-        type: "text",
-        text: `Please process this message: ${message}`,
-      },
-    },
-  ],
-}));
 
 const app = express();
 
@@ -46,23 +43,23 @@ const app = express();
 // sessionId to transport
 const transports: { [sessionId: string]: SSEServerTransport } = {};
 
-app.get("/sse", async (_: Request, res: Response) => {
-  const transport = new SSEServerTransport("/messages", res);
-  transports[transport.sessionId] = transport;
-  res.on("close", () => {
-    delete transports[transport.sessionId];
-  });
-  await server.connect(transport);
+app.get('/sse', async (_: Request, res: Response) => {
+	const transport = new SSEServerTransport('/messages', res);
+	transports[transport.sessionId] = transport;
+	res.on('close', () => {
+		delete transports[transport.sessionId];
+	});
+	await server.connect(transport);
 });
 
-app.post("/messages", async (req: Request, res: Response) => {
-  const sessionId = req.query.sessionId as string;
-  const transport = transports[sessionId];
-  if (transport) {
-    await transport.handlePostMessage(req, res);
-  } else {
-    res.status(400).send("No transport found for sessionId");
-  }
+app.post('/messages', async (req: Request, res: Response) => {
+	const sessionId = req.query.sessionId as string;
+	const transport = transports[sessionId];
+	if (transport) {
+		await transport.handlePostMessage(req, res);
+	} else {
+		res.status(400).send('No transport found for sessionId');
+	}
 });
 
 app.listen(3001);
