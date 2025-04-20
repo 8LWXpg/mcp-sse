@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 const server = new McpServer({
 	name: 'openkm',
@@ -52,9 +52,20 @@ server.resource(
 	}),
 );
 
-server.tool('echo', { message: z.string() }, async ({ message }) => ({
-	content: [{ type: 'text', text: `Tool echo: ${message} ${message}` }],
-}));
+server.resource(
+	'Get list of all keywords',
+	'search://getKeywordMap',
+	async (uri: URL) => ({
+		contents: [
+			{
+				uri: uri.href,
+				text: await (
+					await fetch(`${okmURL}/search/getKeywordMap`, { headers: okmHeaders })
+				).text(),
+			},
+		],
+	}),
+);
 
 async function downloadFile(url: URL, fileName: string): Promise<string> {
 	try {
@@ -106,6 +117,48 @@ server.tool('documentGetContent', { uuid: z.string() }, async ({ uuid }) => {
 		],
 	};
 });
+
+const SearchQurey = z.object({
+	offset: z.number().int().nullish(),
+	limit: z.number().int().nullish(),
+	content: z.string().nullish(),
+	name: z.string().nullish(),
+	domain: z.number().int().nullish(),
+	keyword: z.string().array().nullish(),
+	category: z.string().array().nullish(),
+	property: z.string().array().nullish(),
+	author: z.string().nullish(),
+	mimeType: z.string().nullish(),
+	lastModifiedFrom: z.string().nullish(),
+	lastModifiedTo: z.string().nullish(),
+	mailSubject: z.string().nullish(),
+	mailFrom: z.string().nullish(),
+	mailTo: z.string().nullish(),
+	path: z.string().nullish(),
+});
+
+server.tool(
+	'findPaginated',
+	{ searchQuery: SearchQurey },
+	async ({ searchQuery }) => {
+		const url = new URL(`${okmURL}/search/findPaginated`);
+		Object.entries(searchQuery).forEach(([k, v]) => {
+			url.searchParams.append(k, String(v));
+		});
+		return {
+			content: [
+				{
+					type: 'text',
+					text: await (
+						await fetch(url, {
+							headers: okmHeaders,
+						})
+					).text(),
+				},
+			],
+		};
+	},
+);
 
 const app = express();
 
