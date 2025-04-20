@@ -2,6 +2,10 @@ import express, { Request, Response } from 'express';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 
 const server = new McpServer({
 	name: 'openkm',
@@ -14,10 +18,6 @@ okmHeaders.set('Accept', 'application/json');
 
 const okmURL = 'http://192.168.0.42:8080/OpenKM/services/rest';
 
-server.tool('echo', { message: z.string() }, async ({ message }) => ({
-	content: [{ type: 'text', text: `Tool echo: ${message} ${message}` }],
-}));
-
 server.resource(
 	'Get user last modified documents',
 	'dashboard://getUserLastModifiedDocuments',
@@ -25,17 +25,87 @@ server.resource(
 		contents: [
 			{
 				uri: uri.href,
-				text: JSON.stringify(
-					await (
-						await fetch(`${okmURL}/dashboard/getUserLastModifiedDocuments`, {
-							headers: okmHeaders,
-						})
-					).json(),
-				),
+				text: await (
+					await fetch(`${okmURL}/dashboard/getUserLastModifiedDocuments`, {
+						headers: okmHeaders,
+					})
+				).text(),
 			},
 		],
 	}),
 );
+
+server.resource(
+	'Get user last uploaded documents',
+	'dashboard://getUserLastUploadedDocuments',
+	async (uri: URL) => ({
+		contents: [
+			{
+				uri: uri.href,
+				text: await (
+					await fetch(`${okmURL}/dashboard/getUserLastUploadedDocuments`, {
+						headers: okmHeaders,
+					})
+				).text(),
+			},
+		],
+	}),
+);
+
+server.tool('echo', { message: z.string() }, async ({ message }) => ({
+	content: [{ type: 'text', text: `Tool echo: ${message} ${message}` }],
+}));
+
+async function downloadFile(url: URL, fileName: string): Promise<string> {
+	try {
+		const okmHeaders = new Headers();
+		okmHeaders.set('Authorization', 'Basic ' + btoa(`okmAdmin:admin`));
+		const res = await fetch(url, { headers: okmHeaders });
+		if (!res.ok) {
+			throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
+		}
+		const fileBuffer = await res.arrayBuffer();
+
+		const tempDir = tmpdir();
+		const filePath = path.join(tempDir, fileName);
+		fs.writeFileSync(filePath, Buffer.from(fileBuffer));
+
+		console.log(`File downloaded to: ${filePath}`);
+		return filePath;
+	} catch (e) {
+		console.error('Error downloading file:', e);
+		throw e;
+	}
+}
+
+function docToMarkdown(filePath: string): string {
+	const pandoc = spawnSync('pandoc', [filePath, '-t', 'gfm', '-o', '-']);
+	return pandoc.stdout.toString('utf8');
+}
+
+server.tool('documentGetContent', { uuid: z.string() }, async ({ uuid }) => {
+	// Get document name
+	const filePath = await (
+		await fetch(`${okmURL}/document/getPath/${uuid}`, {
+			headers: okmHeaders,
+		})
+	).text();
+	const fileName = filePath.split('/').pop() || filePath;
+
+	const download = await downloadFile(
+		new URL(`${okmURL}/document/getContent?docId=${uuid}`),
+		fileName,
+	);
+	const md = docToMarkdown(download);
+	return {
+		content: [
+			{
+				type: 'text',
+				text: md,
+			},
+		],
+	};
+});
 
 const app = express();
 
