@@ -19,7 +19,7 @@ okmHeaders.set('Accept', 'application/json');
 const okmURL = 'http://192.168.0.42:8080/OpenKM/services/rest';
 
 server.resource(
-	'Get user last modified documents',
+	'get-user-last-modified-documents',
 	'dashboard://getUserLastModifiedDocuments',
 	async (uri: URL) => ({
 		contents: [
@@ -36,7 +36,7 @@ server.resource(
 );
 
 server.resource(
-	'Get user last uploaded documents',
+	'get-user-last-uploaded-documents',
 	'dashboard://getUserLastUploadedDocuments',
 	async (uri: URL) => ({
 		contents: [
@@ -53,7 +53,7 @@ server.resource(
 );
 
 server.resource(
-	'Get list of all keywords',
+	'get-list-of-all-keywords',
 	'search://getKeywordMap',
 	async (uri: URL) => ({
 		contents: [
