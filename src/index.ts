@@ -94,7 +94,7 @@ function docToMarkdown(filePath: string): string {
 	return pandoc.stdout.toString('utf8');
 }
 
-server.tool('documentGetContent', { uuid: z.string() }, async ({ uuid }) => {
+server.tool('document-get-content', { uuid: z.string() }, async ({ uuid }) => {
 	// Get document name
 	const filePath = await (
 		await fetch(`${okmURL}/document/getPath/${uuid}`, {
@@ -138,7 +138,7 @@ const SearchQurey = z.object({
 });
 
 server.tool(
-	'findPaginated',
+	'find-paginated',
 	{ searchQuery: SearchQurey },
 	async ({ searchQuery }) => {
 		const url = new URL(`${okmURL}/search/findPaginated`);
